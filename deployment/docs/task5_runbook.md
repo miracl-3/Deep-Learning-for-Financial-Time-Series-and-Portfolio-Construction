@@ -17,7 +17,7 @@ Task 3 is not deployed.
 From the project root:
 
 ```powershell
-cd "D:\Projects\Deep Learning Project\deployment"
+cd deployment
 python -m uvicorn api.api_app:app --reload
 ```
 
@@ -37,10 +37,10 @@ Useful endpoints:
 
 ## Start the Web Interface
 
-Open a second terminal:
+Open a second terminal at the repository root and activate the same virtual environment:
 
 ```powershell
-cd "D:\Projects\Deep Learning Project\deployment"
+cd deployment
 streamlit run .\app\streamlit_app.py
 ```
 

@@ -1,212 +1,181 @@
-# CS313 Deep Learning Stock Market Project
+# Deep Learning for Financial Time Series and Portfolio Construction
 
-This repository contains the final CS313 deep learning project on stock-market
-forecasting, trading signals, portfolio construction, and model deployment.
+An empirical study of recurrent neural networks for equity forecasting, trading-signal classification, and portfolio allocation using Nasdaq and Vietnamese stock-market data.
 
-The main notebook implements Tasks 1-5. The deployment package exposes selected trained
-models through a FastAPI REST service and a Streamlit web interface.
+Originally developed for **CS313 Deep Learning**, this project connects data preparation, GRU modeling, financial evaluation, and a local inference prototype. Its central finding is that price-forecast accuracy, directional performance, and portfolio outcomes must be assessed separately: improvements in one measure do not establish a useful trading strategy.
 
-## Project Scope
+**Author / repository owner:** [miracl-3](https://github.com/miracl-3)
 
-| Task | Summary | Deployment Status |
-|---|---|---|
-| Task 1 | Nasdaq stock price forecasting | Task 1.1 deployed |
-| Task 2 | Vietnam stock price forecasting | Task 2.1 deployed |
-| Task 3 | Vietnam buy/sell signal classification | Analyzed, not deployed |
-| Task 4 | Vietnam portfolio composition and risk management | Deployed as portfolio output |
-| Task 5 | API deployment, SaaS interface, and AI workflow design | Implemented |
+**Status:** Coursework completed in May 2026; documentation revised on 18 October 2026. Results below summarize the original saved notebook outputs. Models have not been retrained for this documentation update.
 
-The deployed Task 5 scope is intentionally limited to:
+[Research questions](#research-questions) · [Methodology](#methodology) · [Results](#results-and-interpretation) · [Limitations](#limitations) · [Repository guide](#repository-guide) · [Getting started](#getting-started)
 
-- Task 1.1: Nasdaq next-day prediction for `GT`
-- Task 2.1: Vietnam next-day prediction for `VCB`
-- Task 4: Vietnam portfolio recommendation
+**Start here:** [Project report](230070-project-report.pdf) · [Main notebook](230070_project_notebook.ipynb) · [Research and evaluation notes](docs/research-notes.md)
 
-## Repository Structure
+## Research questions
+
+1. How do GRU models perform on next-observation and three-observation equity price forecasts across two markets?
+2. Do price-forecast improvements also produce reliable directional predictions and buy/sell classifications?
+3. How do predicted-return and inverse-volatility allocations compare with an equal-weight portfolio in the historical illustration?
+
+## Methodology
+
+| Component | Implementation |
+| --- | --- |
+| Market data | Historical CSV datasets under `data/nasdaq/` and `data/vn_dataset/`; selected forecasting examples are `GT` and `VCB`. |
+| Price features | OHLCV, adjusted close where available, log returns, 10- and 20-observation moving averages, and rolling volatility. |
+| Price models | GRU forecasters with a 30-observation lookback; next-observation, third-observation, and three-output forecasts. |
+| Experimental design | Chronological 70% / 15% / 15% train / validation / test blocks, training-fitted scalers, early stopping, and time-series cross-validation on the pre-test block. |
+| Forecast benchmarks | Persistence forecasts using the preceding observed price; a separate test-mean diagnostic is discussed in the research notes. |
+| Signal classification | GRU classifiers for Vietnamese buy and sell labels, evaluated with precision, recall, F1, ROC AUC, and precision-recall metrics. |
+| Portfolio allocation | A shared return model across 40 Vietnamese stocks, a 60-observation lookback, a 20-observation target horizon, risk scoring, and eight-stock allocations. A separate mean-variance example is also included. |
+| Inference prototype | Saved Keras models and scalers served by FastAPI, with a Streamlit interface for selected forecasts and stored portfolio outputs. |
+
+The original assignment labels, **Tasks 1–5**, are retained in the notebook and API. They map to Nasdaq forecasting, Vietnamese forecasting, signal classification, portfolio construction, and deployment, respectively.
+
+## Results and interpretation
+
+These values are rounded from the notebook's saved outputs. They have not been independently reproduced in a fresh environment. Price errors use each dataset's original target units, so RMSE should be compared within a market.
+
+### Next-observation price forecasts
+
+| Market / ticker | Model | RMSE | sMAPE (%) | R² | Directional accuracy (%) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Nasdaq / GT | GRU | 3.035 | 13.10 | 0.836 | 42.31 |
+| Nasdaq / GT | Persistence | 3.467 | 13.58 | 0.786 | 46.89 |
+| Vietnam / VCB | GRU | 4,979.200 | 5.53 | 0.229 | 44.20 |
+| Vietnam / VCB | Persistence | 1,409.475 | 1.31 | 0.938 | 42.83 |
+
+The Nasdaq GRU improves RMSE and sMAPE over persistence, while its reported directional accuracy is lower. For VCB, persistence is substantially stronger on price error. The results support evaluating model complexity against simple forecasts rather than assuming that a neural model is preferable.
+
+![Saved Nasdaq GRU next-observation forecast against actual target values](figures/nasdaq-next-day-forecast.png)
+
+*Original notebook plot, showing the first 200 test sequences for Task 1.1. The horizontal axis indexes sequences rather than calendar dates. "Directional accuracy" in the table compares changes between successive predicted prices with changes between successive actual prices; it is not a trading hit rate.*
+
+### Trading-signal classification
+
+| Signal | Precision | Recall | F1 | ROC AUC |
+| --- | ---: | ---: | ---: | ---: |
+| Buy | 0.310 | 0.530 | 0.391 | 0.464 |
+| Sell | 0.358 | 0.623 | 0.455 | 0.551 |
+
+Discrimination is weak in these saved experiments. The classifiers remain part of the research notebook and are not exposed by the local inference service. A small difference from a benchmark does not, on its own, demonstrate statistically reliable predictive value.
+
+### Portfolio allocation: retrospective illustration
+
+**Evaluation qualification:** the notebook constructs allocations from end-of-sample forecasts and risk scores, then applies those weights to an earlier historical period. This introduces look-ahead bias. The following comparison is a retrospective illustration of the allocation mechanics, rather than a valid out-of-sample strategy backtest.
+
+| Allocation | Total return (%) | Reported Sharpe | Maximum drawdown (%) |
+| --- | ---: | ---: | ---: |
+| Predicted-return weighted ("Risk-Taking") | 64.04 | 0.930 | -36.45 |
+| Inverse-volatility weighted ("Prudent") | 56.77 | 0.936 | -32.29 |
+| Equal-weight selected-stock benchmark | 60.14 | 0.964 | -33.94 |
+
+![Original historical portfolio comparison; allocations use information from the end of the sample](figures/portfolio-retrospective-comparison.png)
+
+*Saved comparison over 798 observations, starting 16 December 2019. The original plot says "Test Period"; the timing limitation above applies to every series. The Sharpe calculation assumes a zero risk-free rate, and trading costs are excluded. The equal-weight comparator contains eight selected stocks, not the whole market. See the [evaluation notes](docs/research-notes.md#portfolio-evaluation) for details.*
+
+## Limitations
+
+- **Information timing:** chronological model splits do not by themselves establish a point-in-time investment study. Universe screening uses full-sample information, and the portfolio illustration has the look-ahead issue described above.
+- **Metric interpretation:** price-level R² and the notebook's directional metric do not establish profitable trading. Multi-output metrics flatten overlapping forecast windows.
+- **Market realism:** transaction costs, slippage, execution constraints, and a full corporate-action and trading-calendar audit are outside the implemented evaluation.
+- **Reproducibility:** dependencies are unpinned, and the original notebook contains Colab-specific paths that require configuration before a fresh run.
+- **Scope:** the supplied price-prediction artifacts are specific to `GT` and `VCB`. The larger Airbyte / PostgreSQL / dbt / Airflow workflow is a documented design; the runnable prototype uses FastAPI and Streamlit.
+
+The [research notes](docs/research-notes.md) document the recorded evidence, data provenance gaps, and methodological improvements that would be needed for a future study.
+
+## Repository guide
 
 ```text
 .
-|-- 230070_project_notebook.ipynb       # Main notebook for Tasks 1-5
-|-- 230070-project-report.pdf           # Final written report
-|-- requirements.txt                    # Python dependencies
+|-- README.md
+|-- 230070_project_notebook.ipynb       # Original analysis and saved outputs
+|-- 230070-project-report.pdf          # Original course report
+|-- requirements.txt                  # Existing application/model dependencies
+|-- docs/
+|   `-- research-notes.md              # Methods, metric definitions, and limitations
 |-- data/
-|   `-- raw/                            # Nasdaq and Vietnam raw datasets
+|   |-- nasdaq/                       # Nasdaq historical CSVs
+|   `-- vn_dataset/                   # Vietnamese historical and supplemental CSVs
 |-- deployment/
-|   |-- api/
-|   |   `-- api_app.py                  # FastAPI REST API
-|   |-- app/
-|   |   `-- streamlit_app.py            # Streamlit SaaS dashboard
-|   |-- artifacts/                      # Saved models, scalers, metadata, portfolios
-|   `-- docs/
-|       |-- task5_runbook.md            # Deployment commands and sample requests
-|       |-- task5_workflow.md           # AI engineering workflow explanation
-|       |-- postgres_schema.sql         # PostgreSQL schema blueprint
-|       `-- final_report_draft.md       # Draft report text
-|-- figures/                            # Optional generated figures
-|-- models/                             # Optional model outputs
-`-- results/                            # Optional result outputs
+|   |-- api/                          # FastAPI application and artifact fallback
+|   |-- app/                          # Streamlit interface
+|   |-- artifacts/                    # Models, scalers, metadata, portfolio CSVs
+|   `-- docs/                         # Runbook, workflow design, schema, report draft
+`-- figures/                          # Research plots and original demo screenshots
 ```
 
-## Environment Setup
+The original notebook and report filenames are retained for traceability. Empty local output folders are omitted from this guide.
 
-Use Python 3.11 if available.
+## Getting started
 
-```powershell
-cd "D:\Projects\Deep Learning Project"
+### Environment
+
+Python 3.11 is a suggested starting point, not a verified reconstruction of the original training environment. `requirements.txt` does not pin versions. JupyterLab and SciPy are included in the installation command because the notebook needs a notebook interface and uses SciPy for its mean-variance example.
+
+```text
+git clone https://github.com/miracl-3/Deep-Learning-for-Financial-Time-Series-and-Portfolio-Construction.git
+cd Deep-Learning-for-Financial-Time-Series-and-Portfolio-Construction
 python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
 ```
 
-If the environment already exists, activate it only:
+Activate the environment on Windows PowerShell:
 
 ```powershell
-cd "D:\Projects\Deep Learning Project"
-.\.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 ```
 
-## Reproduce the Notebook
+Or on macOS / Linux:
 
-Open and run:
+```bash
+source .venv/bin/activate
+```
+
+Install dependencies:
 
 ```text
-230070_project_notebook.ipynb
+python -m pip install -r requirements.txt jupyterlab scipy
 ```
 
-The notebook contains:
+### Inspect or rerun the notebook
 
-- reusable preprocessing, feature engineering, scaling, and sequence-building utilities
-- Task 1 Nasdaq forecasting experiments
-- Task 2 Vietnam forecasting experiments
-- Task 3 trading signal classification
-- Task 4 portfolio construction and backtesting
-- Task 5 artifact export and deployment setup
+The [notebook](230070_project_notebook.ipynb) can be inspected on GitHub without training. To work locally, launch `jupyter lab` from the repository root and open it there.
 
-The notebook is the source of the trained artifacts saved under:
+Before executing cells, configure the notebook's existing `PROJECT_DIR` for your checkout and `RAW_DATA_DIR` for its `data/` folder. The original notebook points to Google Drive and `data/raw/`; the committed datasets are directly under `data/nasdaq/` and `data/vn_dataset/`. Confirm the resolved paths before running the experiments. The [research notes](docs/research-notes.md#reproduction-notes) explain the remaining reproduction limits.
+
+### Run the inference prototype
+
+From the repository root, with the environment active:
 
 ```text
-deployment/artifacts/
-```
-
-## Run Task 5.1 - FastAPI Model Service
-
-Start the API server:
-
-```powershell
-cd "D:\Projects\Deep Learning Project\deployment"
+cd deployment
 python -m uvicorn api.api_app:app --reload
 ```
 
-Open the interactive API documentation:
+Open [FastAPI documentation](http://127.0.0.1:8000/docs). In a second terminal at the repository root, activate the same environment and run:
 
 ```text
-http://127.0.0.1:8000/docs
+cd deployment
+python -m streamlit run app/streamlit_app.py
 ```
 
-Main endpoints:
+Open the [Streamlit interface](http://localhost:8501). Saved artifacts support the selected next-observation models and stored portfolio tables; retraining is separate from serving those files.
 
 | Endpoint | Purpose |
-|---|---|
-| `GET /health` | Check that the API is running |
-| `GET /models` | List deployed model artifacts |
-| `POST /predict/task1` | Predict Task 1.1 Nasdaq next-day price |
-| `POST /predict/task2` | Predict Task 2.1 Vietnam next-day price |
-| `GET /portfolio/task4` | Load Task 4 portfolio recommendations |
+| --- | --- |
+| `GET /health` | Service status |
+| `GET /models` | Available artifact metadata |
+| `POST /predict/task1` | GT next-observation price forecast |
+| `POST /predict/task2` | VCB next-observation price forecast |
+| `GET /portfolio/task4` | Stored portfolio outputs |
 
-Example Task 1.1 request body:
+See the [deployment runbook](deployment/docs/task5_runbook.md) for sample requests and the [workflow design](deployment/docs/task5_workflow.md) for the proposed orchestration architecture. Sequence inputs require 30 rows with 10 features for GT or 9 for VCB; a one-row request is insufficient.
 
-```json
-{
-  "features": [
-    [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
-  ],
-  "scaled": true
-}
-```
+## Academic context and attribution
 
-The actual Task 1.1 request must contain 30 rows because the model uses a 30-day
-lookback window. Task 2.1 also uses 30 rows, but each row has 9 features instead of 10.
+This repository preserves a CS313 coursework study maintained by [miracl-3](https://github.com/miracl-3). The course assignment brief remains in the first notebook cell, and the original report and task labels provide a record of the submission context.
 
-## Run Task 5.2 - Streamlit SaaS Interface
+The implementation covers preprocessing and sequence utilities, recurrent forecasting and classification, portfolio scoring and allocation, artifact export, and a local API/dashboard prototype. The original artifacts should be consulted for the work itself; this documentation update adds no model training or application functionality.
 
-Keep the FastAPI server running. In a second terminal:
-
-```powershell
-cd "D:\Projects\Deep Learning Project\deployment"
-streamlit run .\app\streamlit_app.py
-```
-
-Open:
-
-```text
-http://localhost:8501
-```
-
-The web interface supports:
-
-- editable recent price tables
-- CSV upload
-- advanced JSON input for API testing
-- next-day prediction display
-- Task 4 portfolio dashboard
-- portfolio charts and CSV export for optional BI tools
-
-## Task 5.3 - AI Engineering Workflow
-
-The proposed production workflow is:
-
-```text
-Airbyte
-  -> PostgreSQL raw stock data
-  -> dbt/Python feature engineering
-  -> Airflow scheduled prediction pipeline
-  -> FastAPI model service
-  -> PostgreSQL prediction and portfolio tables
-  -> Streamlit or Power BI dashboard
-```
-
-Supporting documentation:
-
-- `deployment/docs/task5_workflow.md`
-- `deployment/docs/postgres_schema.sql`
-- `deployment/docs/task5_runbook.md`
-
-PostgreSQL, Airbyte, dbt, and Airflow are included as the production workflow design.
-The local runnable prototype uses FastAPI and Streamlit directly.
-
-## Notes on Model Scope
-
-The deployed Task 1.1 and Task 2.1 artifacts are ticker-specific demonstrations:
-
-- `task1_nasdaq_next_day`: trained/deployed for `GT`
-- `task2_vietnam_next_day`: trained/deployed for `VCB`
-
-The app should not be interpreted as a universal predictor for every ticker in the raw
-data folder unless a generalized multi-ticker model is trained and exported.
-
-## Troubleshooting
-
-If Streamlit cannot connect to the API, make sure FastAPI is running at:
-
-```text
-http://127.0.0.1:8000
-```
-
-If Swagger returns `422 Unprocessable Entity`, check that:
-
-- `features` is a list of numeric lists
-- Task 1.1 has 30 rows x 10 features
-- Task 2.1 has 30 rows x 9 features
-- explanatory text such as `"... repeated for 30 days ..."` is not included in the actual JSON request
-
-## Submission Artifacts
-
-Recommended files to include for grading:
-
-- `230070_project_notebook.ipynb`
-- `230070-project-report.pdf`
-- `requirements.txt`
-- `deployment/api/api_app.py`
-- `deployment/app/streamlit_app.py`
-- `deployment/artifacts/`
-- `deployment/docs/`
+The upstream dataset providers, collection dates, and redistribution permissions are not established by the existing repository documentation. The files are described here as the supplied coursework datasets; no provider or data license is inferred.
